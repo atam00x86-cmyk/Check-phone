@@ -116,11 +116,12 @@
   </div>
 
   <script>
-    // 配置：请将此处替换为你的 Google Sheet CSV 链接
+    // Dùng đúng link CSV bạn gửi
     const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv";
 
     let phoneSet = new Set();
     let isLoaded = false;
+    let loadingPromise = null;
 
     const resultBox = document.getElementById("resultBox");
     const phoneInput = document.getElementById("phoneInput");
@@ -132,6 +133,27 @@
       let s = String(raw).trim();
       s = s.replace(/\D/g, ""); // 只保留数字
       return s;
+    }
+
+    // 显示结果
+    function showResultMessage(type, text) {
+      resultBox.style.display = "block";
+      resultBox.className = "result " + type;
+      resultBox.textContent = text;
+    }
+
+    function showResult(found, inputRaw) {
+      const normalized = normalizePhone(inputRaw);
+      if (!normalized) {
+        showResultMessage("not-ok", "请输入有效的电话号码");
+        return;
+      }
+
+      if (found) {
+        showResultMessage("ok", `✅ 电话号码 ${inputRaw} 在列表中`);
+      } else {
+        showResultMessage("not-ok", `❌ 电话号码 ${inputRaw} 不在列表中`);
+      }
     }
 
     // 加载 CSV 数据
@@ -168,6 +190,7 @@
 
         isLoaded = true;
         console.log("已加载号码数量:", phoneSet.size);
+        showResultMessage("ok", "数据已加载完成，可以开始查询。");
 
       } catch (err) {
         console.error("加载错误:", err);
@@ -176,34 +199,18 @@
       }
     }
 
-    // 显示结果
-    function showResultMessage(type, text) {
-      resultBox.style.display = "block";
-      resultBox.className = "result " + type;
-      resultBox.textContent = text;
-    }
-
-    function showResult(found, inputRaw) {
-      const normalized = normalizePhone(inputRaw);
-      if (!normalized) {
-        showResultMessage("not-ok", "请输入有效的电话号码");
-        return;
-      }
-
-      if (found) {
-        showResultMessage("ok", `✅ 电话号码 ${inputRaw} 在列表中`);
-      } else {
-        showResultMessage("not-ok", `❌ 电话号码 ${inputRaw} 不在列表中`);
-      }
-    }
-
-    // 点击查询
-    function handleCheck() {
-      if (!isLoaded) {
-        alert("数据仍在加载，请稍候再试。");
-        return;
-      }
+    // 点击查询（nếu chưa load xong thì đợi luôn）
+    async function handleCheck() {
       const value = phoneInput.value;
+
+      if (!isLoaded) {
+        showResultMessage("error", "数据正在加载中，请稍等片刻…");
+        if (!loadingPromise) {
+          loadingPromise = loadPhoneList();
+        }
+        await loadingPromise;
+      }
+
       const normalized = normalizePhone(value);
       if (!normalized) {
         showResult(false, value);
@@ -221,7 +228,7 @@
     });
 
     // 页面加载立即读取数据
-    loadPhoneList();
+    loadingPromise = loadPhoneList();
   </script>
 </body>
 </html>
