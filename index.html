@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tra cứu số điện thoại trong danh sách</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+    .container {
+      background: #ffffff;
+      margin: 24px;
+      padding: 24px;
+      border-radius: 16px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.5rem;
+      text-align: center;
+      color: #111827;
+    }
+    p.desc {
+      margin-top: 4px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      color: #4b5563;
+      text-align: center;
+    }
+    label {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #374151;
+      display: block;
+      margin-bottom: 6px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input[type="text"]:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+    }
+    button {
+      margin-top: 12px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: none;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      transition: background 0.15s ease, transform 0.05s ease;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    .status {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+    .status.error {
+      color: #b91c1c;
+    }
+    .result {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      display: none;
+    }
+    .result.ok {
+      background: #ecfdf3;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+    .result.not-ok {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+    .small-note {
+      margin-top: 16px;
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      background: #eff6ff;
+      color: #1d4ed8;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tra cứu số điện thoại</h1>
+    <p class="desc">
+      Kiểm tra xem số điện thoại có nằm trong danh sách trên Google Sheet hay không.<br/>
+      (Quét tất cả các cột có dữ liệu số điện thoại)
+    </p>
+
+    <div class="status" id="loadStatus">Đang tải danh sách số điện thoại...</div>
+
+    <div style="margin-top: 16px;">
+      <label for="phoneInput">
+        Nhập số điện thoại cần tra cứu
+        <span class="pill">Tự động bỏ khoảng trắng, dấu “-”, “+84”...</span>
+      </label>
+      <input
+        type="text"
+        id="phoneInput"
+        placeholder="VD: 0912345678 hoặc +84 912 345 678"
+      />
+      <button id="checkBtn">Kiểm tra</button>
+    </div>
+
+    <div id="resultBox" class="result"></div>
+
+    <div class="small-note">
+      🔁 Danh sách được tải khi mở trang. Nếu bạn cập nhật sheet (thêm cột A → AS → ...),
+      chỉ cần tải lại trang (F5), hệ thống sẽ tự quét tất cả các cột.
+    </div>
+  </div>
+
+  <script>
+    // TODO: THAY URL NÀY BẰNG LINK CSV CỦA SPREADSHEET CỦA BẠN
+    //
+    // Nếu bạn dùng Google Sheets:
+    // 1. Vào File → Share → Publish to web (Xuất bản lên web)
+    // 2. Chọn sheet cần dùng, định dạng: CSV
+    // 3. Copy link CSV đó và dán vào đây.
+    //
+    // Ví dụ dạng link:
+    // "https://docs.google.com/spreadsheets/d/ID_SHEET/export?format=csv&gid=0"
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv";
+
+    let phoneSet = new Set();
+    let isLoaded = false;
+
+    const loadStatusEl = document.getElementById("loadStatus");
+    const resultBox = document.getElementById("resultBox");
+    const phoneInput = document.getElementById("phoneInput");
+    const checkBtn = document.getElementById("checkBtn");
+
+    // Chuẩn hoá số điện thoại: bỏ hết ký tự không phải số
+    // + xử lý trường hợp +84 -> 0
+    function normalizePhone(raw) {
+      if (!raw) return "";
+      let s = String(raw).trim();
+
+      // Đổi +84xxxx -> 0xxxx
+      if (s.startsWith("+84")) {
+        s = "0" + s.slice(3);
+      }
+
+      // Bỏ tất cả ký tự không phải số
+      s = s.replace(/\D/g, "");
+
+      return s;
+    }
+
+    async function loadPhoneList() {
+      try {
+        loadStatusEl.textContent = "Đang tải danh sách số điện thoại...";
+        const res = await fetch(SHEET_CSV_URL);
+        if (!res.ok) {
+          throw new Error("Không thể tải CSV, mã lỗi HTTP: " + res.status);
+        }
+
+        const text = await res.text();
+        const lines = text.split(/\r?\n/);
+
+        phoneSet.clear();
+
+        // Giả sử dòng đầu tiên là header → bắt đầu từ dòng thứ 2
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          // Tách theo dấu phẩy. (Giả định các ô số điện thoại không chứa dấu phẩy)
+          const cols = line.split(",");
+
+          // ✅ QUÉT TẤT CẢ CÁC CỘT TRONG DÒNG
+          for (let j = 0; j < cols.length; j++) {
+            const cellRaw = cols[j].trim();
+            if (!cellRaw) continue;
+
+            const normalized = normalizePhone(cellRaw);
+            if (normalized) {
+              phoneSet.add(normalized);
+            }
+          }
+        }
+
+        isLoaded = true;
+        loadStatusEl.textContent =
+          `Đã tải ${phoneSet.size} số điện thoại (quét mọi cột có dữ liệu).`;
+        loadStatusEl.classList.remove("error");
+      } catch (err) {
+        console.error(err);
+        loadStatusEl.textContent =
+          "Lỗi khi tải danh sách. Hãy kiểm tra lại link CSV trong mã nguồn.";
+        loadStatusEl.classList.add("error");
+      }
+    }
+
+    function showResult(found, inputRaw) {
+      const normalized = normalizePhone(inputRaw);
+      if (!normalized) {
+        resultBox.style.display = "block";
+        resultBox.className = "result not-ok";
+        resultBox.textContent = "Vui lòng nhập số điện thoại hợp lệ.";
+        return;
+      }
+
+      resultBox.style.display = "block";
+      if (found) {
+        resultBox.className = "result ok";
+        resultBox.textContent =
+          `✅ Số điện thoại ${inputRaw} (chuẩn hóa: ${normalized}) CÓ nằm trong danh sách.`;
+      } else {
+        resultBox.className = "result not-ok";
+        resultBox.textContent =
+          `❌ Số điện thoại ${inputRaw} (chuẩn hóa: ${normalized}) KHÔNG nằm trong danh sách.`;
+      }
+    }
+
+    function handleCheck() {
+      if (!isLoaded) {
+        alert("Danh sách chưa tải xong. Vui lòng đợi vài giây rồi thử lại.");
+        return;
+      }
+      const value = phoneInput.value;
+      const normalized = normalizePhone(value);
+      if (!normalized) {
+        showResult(false, value);
+        return;
+      }
+      const found = phoneSet.has(normalized);
+      showResult(found, value);
+    }
+
+    checkBtn.addEventListener("click", handleCheck);
+    phoneInput.addEventListener("keyup", function (e) {
+      if (e.key === "Enter") {
+        handleCheck();
+      }
+    });
+
+    // Tải danh sách khi mở trang
+    loadPhoneList();
+  </script>
+</body>
+</html>
