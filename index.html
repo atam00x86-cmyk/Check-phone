@@ -116,48 +116,30 @@
   </div>
 
   <script>
-    // TODO: THAY URL NÀY BẰNG LINK CSV CỦA SPREADSHEET CỦA BẠN
-    //
-    // Nếu bạn dùng Google Sheets:
-    // 1. Vào File → Share → Publish to web (Xuất bản lên web)
-    // 2. Chọn sheet cần dùng, định dạng: CSV
-    // 3. Copy link CSV đó và dán vào đây.
-    //
-    // Ví dụ dạng link:
-    // "https://docs.google.com/spreadsheets/d/ID_SHEET/export?format=csv&gid=0"
-    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/ID_SHEET/export?format=csv&gid=0";
+    // 配置：请将此处替换为你的 Google Sheet CSV 链接
+    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv";
 
     let phoneSet = new Set();
     let isLoaded = false;
 
-    const loadStatusEl = document.getElementById("loadStatus");
     const resultBox = document.getElementById("resultBox");
     const phoneInput = document.getElementById("phoneInput");
     const checkBtn = document.getElementById("checkBtn");
 
-    // Chuẩn hoá số điện thoại: bỏ hết ký tự không phải số
-    // + xử lý trường hợp +84 -> 0
+    // 规范化电话号码：去除所有非数字字符（不自动添加前缀，不处理 +84）
     function normalizePhone(raw) {
       if (!raw) return "";
       let s = String(raw).trim();
-
-      // Đổi +84xxxx -> 0xxxx
-      if (s.startsWith("+84")) {
-        s = "0" + s.slice(3);
-      }
-
-      // Bỏ tất cả ký tự không phải số
-      s = s.replace(/\D/g, "");
-
+      s = s.replace(/\D/g, ""); // 只保留数字
       return s;
     }
 
+    // 加载 CSV 数据
     async function loadPhoneList() {
       try {
-        loadStatusEl.textContent = "Đang tải danh sách số điện thoại...";
         const res = await fetch(SHEET_CSV_URL);
         if (!res.ok) {
-          throw new Error("Không thể tải CSV, mã lỗi HTTP: " + res.status);
+          throw new Error("无法加载 CSV，HTTP 状态码：" + res.status);
         }
 
         const text = await res.text();
@@ -165,15 +147,14 @@
 
         phoneSet.clear();
 
-        // Giả sử dòng đầu tiên là header → bắt đầu từ dòng thứ 2
-        for (let i = 1; i < lines.length; i++) {
+        // 不假定第一行一定是表头，逐行解析
+        for (let i = 0; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
 
-          // Tách theo dấu phẩy. (Giả định các ô số điện thoại không chứa dấu phẩy)
           const cols = line.split(",");
 
-          // ✅ QUÉT TẤT CẢ CÁC CỘT TRONG DÒNG
+          // 遍历整行每一列
           for (let j = 0; j < cols.length; j++) {
             const cellRaw = cols[j].trim();
             if (!cellRaw) continue;
@@ -186,41 +167,40 @@
         }
 
         isLoaded = true;
-        loadStatusEl.textContent =
-          `Đã tải ${phoneSet.size} số điện thoại (quét mọi cột có dữ liệu).`;
-        loadStatusEl.classList.remove("error");
+        console.log("已加载号码数量:", phoneSet.size);
+
       } catch (err) {
-        console.error(err);
-        loadStatusEl.textContent =
-          "Lỗi khi tải danh sách. Hãy kiểm tra lại link CSV trong mã nguồn.";
-        loadStatusEl.classList.add("error");
+        console.error("加载错误:", err);
+        isLoaded = true;
+        showResultMessage("error", "数据加载失败，请检查 CSV 配置。");
       }
+    }
+
+    // 显示结果
+    function showResultMessage(type, text) {
+      resultBox.style.display = "block";
+      resultBox.className = "result " + type;
+      resultBox.textContent = text;
     }
 
     function showResult(found, inputRaw) {
       const normalized = normalizePhone(inputRaw);
       if (!normalized) {
-        resultBox.style.display = "block";
-        resultBox.className = "result not-ok";
-        resultBox.textContent = "请输入要查询的电话号码";
+        showResultMessage("not-ok", "请输入有效的电话号码");
         return;
       }
 
-      resultBox.style.display = "block";
       if (found) {
-        resultBox.className = "result ok";
-        resultBox.textContent =
-          `✅ 电话号码 ${inputRaw} 在列表中`;
+        showResultMessage("ok", `✅ 电话号码 ${inputRaw} 在列表中`);
       } else {
-        resultBox.className = "result not-ok";
-        resultBox.textContent =
-          `❌ 电话号码 ${inputRaw} 不在列表中`;
+        showResultMessage("not-ok", `❌ 电话号码 ${inputRaw} 不在列表中`);
       }
     }
 
+    // 点击查询
     function handleCheck() {
       if (!isLoaded) {
-        alert("Danh sách chưa tải xong. Vui lòng đợi vài giây rồi thử lại.");
+        alert("数据仍在加载，请稍候再试。");
         return;
       }
       const value = phoneInput.value;
@@ -240,7 +220,7 @@
       }
     });
 
-    // Tải danh sách khi mở trang
+    // 页面加载立即读取数据
     loadPhoneList();
   </script>
 </body>
