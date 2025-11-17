@@ -91,6 +91,11 @@
       color: #b91c1c;
       border: 1px solid #fecaca;
     }
+    .result.error {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fed7aa;
+    }
   </style>
 </head>
 <body>
@@ -102,7 +107,7 @@
       <input
         type="text"
         id="phoneInput"
-        placeholder="例如：12345678901"
+        placeholder="例如：12352312153（不带 0 或 +84）"
       />
       <button id="checkBtn">查询</button>
     </div>
@@ -112,16 +117,17 @@
 
   <script>
     // ================================
-    // 配置区域：在这里填入你的 Google Sheet CSV 链接
-    // 支持多个 Sheet（一个或多个都可以）
+    // 在这里配置你的 Google Sheet CSV 链接
+    // 支持一个或多个 Sheet
     // ================================
     const SHEET_CSV_URLS = [
-      // 例子（请替换为你自己的链接）：
-      //"https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv",
-];
-    // 使用 Set 存储所有电话号码，方便快速查找
+      // 举例（请替换成你自己的链接）：
+      // "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv"
+    ];
+
     let phoneSet = new Set();
     let isLoaded = false;
+    let loadError = null;
 
     const resultBox = document.getElementById("resultBox");
     const phoneInput = document.getElementById("phoneInput");
@@ -129,131 +135,10 @@
 
     /**
      * 规范化电话号码：
-     * - 去掉前后空格
+     * - 去空格
      * - 删除所有非数字字符
-     * - 不对前缀做任何修改（不自动加 0，不处理 +84）
+     * - 不自动加 0，不处理 +84
      */
     function normalizePhone(raw) {
       if (!raw) return "";
-      let s = String(raw).trim();
-      // 删除所有非数字字符
-      s = s.replace(/\D/g, "");
-      return s;
-    }
-
-    /**
-     * 读取并处理单个 CSV 链接（一个 Sheet）
-     * @param {string} url CSV 下载地址
-     */
-    async function loadOneSheet(url) {
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error("无法获取 CSV：" + url + "，HTTP 状态码：" + res.status);
-      }
-
-      const text = await res.text();
-      const lines = text.split(/\r?\n/);
-
-      // 默认第一行是表头，从第二行开始处理
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // 简单按照逗号分割（假设电话号码所在单元格不包含逗号）
-        const cols = line.split(",");
-
-        // 遍历本行的所有列，扫描所有单元格
-        for (let j = 0; j < cols.length; j++) {
-          const cellRaw = cols[j].trim();
-          if (!cellRaw) continue;
-
-          const normalized = normalizePhone(cellRaw);
-          if (normalized) {
-            phoneSet.add(normalized);
-          }
-        }
-      }
-    }
-
-    /**
-     * 依次加载所有 Sheet
-     */
-    async function loadAllSheets() {
-      try {
-        // 如果你只有一个 Sheet，也可以只放一个 URL
-        for (const url of SHEET_CSV_URLS) {
-          await loadOneSheet(url);
-        }
-        isLoaded = true;
-        console.log("已加载电话号码数量：", phoneSet.size);
-      } catch (err) {
-        console.error("加载 Sheet 时出错：", err);
-        // 即使出错，也标记为已完成，避免一直卡在“未加载”状态
-        isLoaded = true;
-      }
-    }
-
-    /**
-     * 显示查询结果
-     * @param {boolean} found 是否找到
-     * @param {string} inputRaw 用户输入的原始值
-     */
-    function showResult(found, inputRaw) {
-      const normalized = normalizePhone(inputRaw);
-      if (!normalized) {
-        resultBox.style.display = "block";
-        resultBox.className = "result not-ok";
-        resultBox.textContent = "请输入有效的电话号码。";
-        return;
-      }
-
-      resultBox.style.display = "block";
-      if (found) {
-        resultBox.className = "result ok";
-        resultBox.textContent = `✅ 电话号码 ${inputRaw} 在列表中。`;
-      } else {
-        resultBox.className = "result not-ok";
-        resultBox.textContent = `❌ 电话号码 ${inputRaw} 不在列表中。`;
-      }
-    }
-
-    /**
-     * 点击“查询”按钮时的处理
-     */
-    function handleCheck() {
-      if (!isLoaded) {
-        alert("数据正在加载中，请稍候再试。");
-        return;
-      }
-
-      const value = phoneInput.value;
-      const normalized = normalizePhone(value);
-
-      if (!normalized) {
-        showResult(false, value);
-        return;
-      }
-
-      const found = phoneSet.has(normalized);
-      showResult(found, value);
-    }
-
-    // 绑定事件
-    checkBtn.addEventListener("click", handleCheck);
-    phoneInput.addEventListener("keyup", function (e) {
-      if (e.key === "Enter") {
-        handleCheck();
-      }
-    });
-
-    // 页面加载时开始异步读取所有 Sheet
-    if (SHEET_CSV_URLS.length > 0) {
-      loadAllSheets();
-    } else {
-      console.warn("尚未配置 SHEET_CSV_URLS，请在脚本顶部配置你的 CSV 链接。");
-      isLoaded = true; // 防止一直被视为“未加载”
-    }
-  </script>
-</body>
-</html>
-
+      let s = String(r
