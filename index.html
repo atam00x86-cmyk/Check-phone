@@ -116,8 +116,11 @@
   </div>
 
   <script>
-    // Dùng đúng link CSV bạn gửi
-    const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv";
+    // 2 CSV URL của bạn
+    const SHEET_CSV_URLS = [
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTCPe3HvdHP1tHFEhmMQn3IwVLM2pTZzt6CVweXZgn3b3Yz60RO9Z7z5GPMFRdBXsS9hPpNM_gJpiOX/pub?output=csv",
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vRpjv8E0f7x1swvvBX33VMdvBCNKLGP0Gv4ml817d7kf3_HRgTKGCyv4RLohwfsg8bG4-DpopvOs72t/pub?output=csv"
+    ];
 
     let phoneSet = new Set();
     let isLoaded = false;
@@ -127,7 +130,7 @@
     const phoneInput = document.getElementById("phoneInput");
     const checkBtn = document.getElementById("checkBtn");
 
-    // 规范化电话号码：去除所有非数字字符（不自动添加前缀，不处理 +84）
+    // 规范化电话号码：去除所有非数字字符
     function normalizePhone(raw) {
       if (!raw) return "";
       let s = String(raw).trim();
@@ -135,7 +138,7 @@
       return s;
     }
 
-    // 显示结果
+    // 显示结果消息
     function showResultMessage(type, text) {
       resultBox.style.display = "block";
       resultBox.className = "result " + type;
@@ -156,40 +159,58 @@
       }
     }
 
-    // 加载 CSV 数据
+    // Hàm parse CSV chung, thêm số vào phoneSet
+    function parseCSVIntoSet(csvText) {
+      const lines = csvText.split(/\r?\n/);
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const cols = line.split(",");
+
+        // duyệt từng cột
+        for (let j = 0; j < cols.length; j++) {
+          const cellRaw = cols[j].trim();
+          if (!cellRaw) continue;
+
+          const normalized = normalizePhone(cellRaw);
+          if (normalized) {
+            phoneSet.add(normalized);
+          }
+        }
+      }
+    }
+
+    // 加载 tất cả CSV 数据
     async function loadPhoneList() {
       try {
-        const res = await fetch(SHEET_CSV_URL);
-        if (!res.ok) {
-          throw new Error("无法加载 CSV，HTTP 状态码：" + res.status);
-        }
+        // fetch song song các URL
+        const responses = await Promise.all(
+          SHEET_CSV_URLS.map(url => fetch(url))
+        );
 
-        const text = await res.text();
-        const lines = text.split(/\r?\n/);
+        // kiểm tra lỗi
+        responses.forEach((res, idx) => {
+          if (!res.ok) {
+            throw new Error("无法加载 CSV " + (idx + 1) + "，HTTP 状态码：" + res.status);
+          }
+        });
+
+        // đọc text của từng CSV
+        const texts = await Promise.all(
+          responses.map(res => res.text())
+        );
 
         phoneSet.clear();
 
-        // 不假定第一行一定是表头，逐行解析
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-
-          const cols = line.split(",");
-
-          // 遍历整行每一列
-          for (let j = 0; j < cols.length; j++) {
-            const cellRaw = cols[j].trim();
-            if (!cellRaw) continue;
-
-            const normalized = normalizePhone(cellRaw);
-            if (normalized) {
-              phoneSet.add(normalized);
-            }
-          }
-        }
+        // parse từng CSV vào set
+        texts.forEach(text => {
+          parseCSVIntoSet(text);
+        });
 
         isLoaded = true;
-        console.log("已加载号码数量:", phoneSet.size);
+        console.log("已加载号码数量(合并两表):", phoneSet.size);
         showResultMessage("ok", "数据已加载完成，可以开始查询。");
 
       } catch (err) {
@@ -199,7 +220,7 @@
       }
     }
 
-    // 点击查询（nếu chưa load xong thì đợi luôn）
+    // 点击查询：如果 chưa load xong thì đợi luôn
     async function handleCheck() {
       const value = phoneInput.value;
 
@@ -227,7 +248,7 @@
       }
     });
 
-    // 页面加载立即读取数据
+    // 页面加载立即读取数据（2 CSV）
     loadingPromise = loadPhoneList();
   </script>
 </body>
